@@ -1,3 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>遇見木子里 POS</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-512.png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<meta name="theme-color" content="#333333">
+<style>
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC", sans-serif;
+    background: #f5f5f5;
+    color: #222;
+    padding: 10px;
+    margin: 0;
+}
+
+h2 {
+    font-family: "Noto Serif TC", "PingFang TC", serif;
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    margin: 10px 0 14px;
+}
+
+h3 {
+    margin: 18px 0 10px;
+}
+
+.tab {
+    display: flex;
+    gap: 6px;
+}
+
+.tab button {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: #ddd;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.tab button.active {
+    background: #333;
+    color: #fff;
+}
+
+.card {
+    background: #fff;
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 12px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.item-btn {
+    min-height: 96px;
+    padding: 18px 10px;
+    font-size: 18px;
+    border: none;
+    border-radius: 12px;
+    background: #eee;
+    font-weight: 700;
+}
+
+.order {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    gap: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.order span {
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.5;
+    flex: 1;
+}
+
+.order-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.order button,
+.food-row button,
+.danger-small {
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: 12px;
+    background: #333;
+    color: #fff;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.order button.remove,
+.food-row button,
+.danger-small {
+    background: #999;
+    font-size: 16px;
+}
+
+input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 12px;
+    font-size: 18px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+}
+
+.btn {
+    width: 100%;
+    padding: 14px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 10px;
+    background: #333;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.btn.secondary {
+    background: #999;
+}
+
+.food-row {
+    display: grid;
+    grid-template-columns: 1fr 110px 48px;
+    gap: 6px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+.history-card {
+    background: #f8f8f8;
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 10px;
+}
+
+.history-card h3 {
+    margin-top: 0;
+}
+
+.empty {
+    color: #777;
+}
+
+@media (max-width: 430px) {
+    .order {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .order span {
+        font-size: 22px;
+    }
+
+    .order-actions {
+        width: 100%;
+    }
+
+    .order button {
+        flex: 1;
+    }
+}
+</style>
+</head>
+
+<body>
+<h2>遇見木子里</h2>
+
+<div class="tab">
+    <button id="tab1" class="active" onclick="show('sale')">出攤</button>
+    <button id="tab2" onclick="show('report')">日結</button>
+    <button id="tab3" onclick="show('history')">報表</button>
+</div>
+
+<div id="sale" class="card">
+    <h3>商品</h3>
+
+    <div class="grid">
+        <button class="item-btn" onclick="addToCart('琥珀油蔥糕',50)">琥珀油蔥糕<br>$50</button>
+        <button class="item-btn" onclick="addToCart('紅豆酥甜糕',50)">紅豆酥甜糕<br>$50</button>
+        <button class="item-btn" onclick="addToCart('項目三',50)">項目三<br>$50</button>
+        <button class="item-btn" onclick="addToCart('項目四',50)">項目四<br>$50</button>
+    </div>
+
+    <h3>本單</h3>
+    <div id="cart"></div>
+
+    <h3>本單金額：$<span id="cartTotal">0</span></h3>
+
+    <button class="btn" onclick="checkout()">結帳</button>
+    <button class="btn secondary" onclick="clearCart()">取消本單</button>
+
+    <hr>
+
+    <h3>今日營收：$<span id="dayTotal">0</span></h3>
+</div>
+
+<div id="report" class="card" style="display:none">
+    <p>日期</p>
+    <input type="date" id="date">
+
+    <h3>食材成本（可多項）</h3>
+    <div id="foodList"></div>
+    <button class="btn" onclick="addFood()">＋新增食材</button>
+
+    <p>人事</p>
+    <input type="number" inputmode="numeric" id="staff">
+
+    <p>租金</p>
+    <input type="number" inputmode="numeric" id="rent">
+
+    <p>管銷</p>
+    <input type="number" inputmode="numeric" id="other">
+
+    <h3>食材總成本：$<span id="foodTotal">0</span></h3>
+    <h3>營收：$<span id="rev">0</span></h3>
+    <h3>最高KPI：$<span id="kpi">0</span></h3>
+    <h3>差額：$<span id="diff">0</span></h3>
+
+    <button class="btn" onclick="save()">日結存檔</button>
+</div>
+
+<div id="history" class="card" style="display:none">
+    <h3>歷史紀錄</h3>
+    <div id="list"></div>
+</div>
+
+<script>
+const STORAGE_KEY = "moodzi-pos-sales";
+const DAY_TOTAL_PREFIX = "moodzi-pos-day-total-";
+
+let cart = {};
+let cartTotal = 0;
+let dayTotal = 0;
+
+function getTodayKey() {
+    let date = new Date();
+    let year = date.getFullYear();
+    let month = String(date.getMonth() + 1).padStart(2, "0");
+    let day = String(date.getDate()).padStart(2, "0");
+    return `${DAY_TOTAL_PREFIX}${year}-${month}-${day}`;
+}
+
+function money(value) {
+    return Math.round(Number(value) || 0);
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function show(p) {
+    document.getElementById("sale").style.display = p === "sale" ? "block" : "none";
+    document.getElementById("report").style.display = p === "report" ? "block" : "none";
+    document.getElementById("history").style.display = p === "history" ? "block" : "none";
+
+    document.getElementById("tab1").classList.toggle("active", p === "sale");
+    document.getElementById("tab2").classList.toggle("active", p === "report");
+    document.getElementById("tab3").classList.toggle("active", p === "history");
+
+    if (p === "history") {
+        load();
+    }
+}
+
+function addToCart(name, price) {
+    if (!cart[name]) {
+        cart[name] = { qty: 0, price: price };
+    }
+    cart[name].qty += 1;
+    renderCart();
+}
+
+function changeQty(name, delta) {
+    if (!cart[name]) return;
+
+    cart[name].qty += delta;
+    if (cart[name].qty <= 0) {
+        delete cart[name];
+    }
+    renderCart();
+}
+
+function removeItem(name) {
+    delete cart[name];
+    renderCart();
+}
+
+function renderCart() {
+    let html = "";
+    cartTotal = 0;
+
+    for (let k in cart) {
+        let item = cart[k];
+        let sub = item.qty * item.price;
+        let safeName = escapeHtml(k);
+        let jsName = escapeHtml(JSON.stringify(k));
+        cartTotal += sub;
+
+        html += `
+        <div class="order">
+            <span>${safeName} x${item.qty} = $${sub}</span>
+            <div class="order-actions">
+                <button onclick='changeQty(${jsName},-1)'>-</button>
+                <button onclick='changeQty(${jsName},1)'>+</button>
+                <button class="remove" onclick='removeItem(${jsName})'>刪</button>
+            </div>
+        </div>`;
+    }
+
+    if (html === "") {
+        html = '<p class="empty">尚未加入商品</p>';
+    }
+
+    document.getElementById("cart").innerHTML = html;
+    document.getElementById("cartTotal").innerText = cartTotal;
+}
+
+function clearCart() {
+    cart = {};
+    cartTotal = 0;
+    renderCart();
+}
+
+function checkout() {
+    if (cartTotal === 0) {
+        alert("沒有商品");
+        return;
+    }
+
+    dayTotal += cartTotal;
+    localStorage.setItem(getTodayKey(), String(dayTotal));
+    clearCart();
+    updateRevenue();
+    calcAll();
+}
+
+function updateRevenue() {
+    document.getElementById("dayTotal").innerText = dayTotal;
+    document.getElementById("rev").innerText = dayTotal;
+}
+
+function addFood(name = "", amount = "") {
+    let id = Date.now() + Math.floor(Math.random() * 1000);
+    let row = document.createElement("div");
+    row.id = "food-" + id;
+    row.className = "food-row";
+    row.innerHTML = `
+        <input placeholder="品項" value="${escapeHtml(name)}">
+        <input type="number" inputmode="numeric" placeholder="金額" value="${escapeHtml(amount)}" oninput="calcAll()">
+        <button onclick="removeFood(${id})">刪</button>
+    `;
+
+    document.getElementById("foodList").appendChild(row);
+}
+
+function removeFood(id) {
+    let row = document.getElementById("food-" + id);
+    if (row) row.remove();
+    calcAll();
+}
+
+function calcFoodTotal() {
+    let total = 0;
+
+    document.querySelectorAll("#foodList input[type=number]").forEach(i => {
+        total += Number(i.value) || 0;
+    });
+
+    document.getElementById("foodTotal").innerText = total;
+    return total;
+}
+
+function calcAll() {
+    let food = calcFoodTotal();
+    let staffVal = Number(document.getElementById("staff").value) || 0;
+    let rentVal = Number(document.getElementById("rent").value) || 0;
+    let otherVal = Number(document.getElementById("other").value) || 0;
+
+    let kpis = [
         food ? food / 0.25 : 0,
         staffVal ? staffVal / 0.2 : 0,
         rentVal ? rentVal / 0.1 : 0,
