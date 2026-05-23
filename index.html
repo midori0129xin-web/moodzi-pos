@@ -145,7 +145,17 @@ input {
 #date {
     width: 100%;
     max-width: 100%;
+    min-width: 0;
     display: block;
+    -webkit-appearance: none;
+    appearance: none;
+    text-align: left;
+}
+
+@supports (-webkit-touch-callout: none) {
+    #date {
+        width: -webkit-fill-available;
+    }
 }
 
 .btn {
