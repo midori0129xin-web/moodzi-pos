@@ -224,14 +224,16 @@ input {
     border-bottom: none;
 }
 
-.last-order-actions {
+.last-order-actions,
+.history-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     margin-top: 10px;
 }
 
-.last-order-actions .btn {
+.last-order-actions .btn,
+.history-actions .btn {
     margin-top: 0;
 }
 
@@ -293,10 +295,12 @@ input {
     <h3>商品</h3>
 
     <div class="grid">
-        <button class="item-btn" onclick="addToCart('起酥紅豆年糕',50)">起酥紅豆年糕<br>$50</button>
-        <button class="item-btn" onclick="addToCart('起酥黑糖年糕',50)">起酥黑糖年糕<br>$50</button>
-        <button class="item-btn" onclick="addToCart('軟餅小糰子',50)">軟餅小糰子<br>$50</button>
-        <button class="item-btn" onclick="addToCart('項目四',50)">項目四<br>$50</button>
+        <button class="item-btn" onclick="addToCart('琥珀油蔥糕',50)">琥珀油蔥糕<br>$50</button>
+        <button class="item-btn" onclick="addToCart('紅豆酥甜糕',50)">紅豆酥甜糕<br>$50</button>
+        <button class="item-btn" onclick="addToCart('項目三',50)">項目三<br>$50</button>
+        <button class="item-btn" onclick="addToCart('綜合年糕',50)">綜合年糕<br>$50</button>
+        <button class="item-btn" onclick="addToCart('項目五',50)">項目五<br>$50</button>
+        <button class="item-btn" onclick="addToCart('項目六',50)">項目六<br>$50</button>
     </div>
 
     <h3>本單</h3>
@@ -372,6 +376,7 @@ let cart = {};
 let cartTotal = 0;
 let dayTotal = 0;
 let selectedPayment = "cash";
+let editingReportDate = "";
 
 function getTodayString() {
     let date = new Date();
@@ -443,6 +448,43 @@ function show(p) {
     }
 }
 
+function getReportStatsForDate(date) {
+    if (!date || date === getTodayString()) {
+        return getTodayStats();
+    }
+
+    let record = getSales().find(item => item.date === date);
+    if (!record) {
+        return {
+            revenue: 0,
+            cash: 0,
+            electronic: 0,
+            fee: 0,
+            net: 0,
+            itemTotals: {},
+            orders: []
+        };
+    }
+
+    return {
+        revenue: money(record.revenue),
+        cash: money(record.cashTotal),
+        electronic: money(record.electronicTotal),
+        fee: money(record.feeTotal),
+        net: money(record.netRevenue || record.revenue),
+        itemTotals: record.itemTotals || {},
+        orders: record.orders || []
+    };
+}
+
+function updateReportRevenueFields(stats) {
+    document.getElementById("rev").innerText = money(stats.revenue);
+    document.getElementById("cashTotal").innerText = money(stats.cash);
+    document.getElementById("electronicTotal").innerText = money(stats.electronic);
+    document.getElementById("feeTotal").innerText = money(stats.fee);
+    document.getElementById("netRevenue").innerText = money(stats.net);
+}
+
 function setPayment(method) {
     selectedPayment = method;
     document.getElementById("payCash").classList.toggle("active", method === "cash");
@@ -510,6 +552,10 @@ function clearCart() {
 
 function getTodayOrders() {
     return JSON.parse(localStorage.getItem(getOrdersKey()) || "[]");
+}
+
+function hasTodayOrdersRecord() {
+    return localStorage.getItem(getOrdersKey()) !== null;
 }
 
 function setTodayOrders(orders) {
@@ -590,7 +636,7 @@ function getTodayStats() {
         orders
     };
 
-    if (!orders.length) {
+    if (!orders.length && !hasTodayOrdersRecord()) {
         let legacyRevenue = Number(localStorage.getItem(getTodayKey())) || 0;
         if (legacyRevenue) {
             stats.revenue = legacyRevenue;
@@ -633,7 +679,7 @@ function updateDayFromOrders() {
 
 function updateRevenue() {
     document.getElementById("dayTotal").innerText = dayTotal;
-    document.getElementById("rev").innerText = dayTotal;
+    updateReportRevenueFields(getReportStatsForDate(document.getElementById("date").value));
 }
 
 function renderTodayStats() {
@@ -648,16 +694,16 @@ function renderTodayStats() {
     document.getElementById("netRevenue").innerText = money(stats.net);
 
     document.getElementById("paymentSummary").innerHTML = `
-        <div class="summary-row"><span>現金</span><strong>${money(stats.cash)}</strong></div>
-        <div class="summary-row"><span>電子支付</span><strong>${money(stats.electronic)}</strong></div>
-        <div class="summary-row"><span>手續費</span><strong>-${money(stats.fee)}</strong></div>
-        <div class="summary-row"><span>實收</span><strong>${money(stats.net)}</strong></div>
+        <div class="summary-row"><span>現金</span><strong>$${money(stats.cash)}</strong></div>
+        <div class="summary-row"><span>電子支付</span><strong>$${money(stats.electronic)}</strong></div>
+        <div class="summary-row"><span>手續費</span><strong>-$${money(stats.fee)}</strong></div>
+        <div class="summary-row"><span>實收</span><strong>$${money(stats.net)}</strong></div>
     `;
 
     let itemHtml = "";
     Object.keys(stats.itemTotals).forEach(name => {
         let item = stats.itemTotals[name];
-        itemHtml += `<div class="summary-row"><span>${escapeHtml(name)} x${item.qty}</span><strong>${money(item.total)}</strong></div>`;
+        itemHtml += `<div class="summary-row"><span>${escapeHtml(name)} x${item.qty}</span><strong>$${money(item.total)}</strong></div>`;
     });
     document.getElementById("salesSummary").innerHTML = itemHtml || '<p class="empty">尚無銷售</p>';
 
@@ -670,13 +716,13 @@ function renderTodayStats() {
     let lines = "";
     for (let name in last.items || {}) {
         let item = last.items[name];
-        lines += `<div class="summary-row"><span>${escapeHtml(name)} x${item.qty}</span><strong>${money(item.qty * item.price)}</strong></div>`;
+        lines += `<div class="summary-row"><span>${escapeHtml(name)} x${item.qty}</span><strong>$${money(item.qty * item.price)}</strong></div>`;
     }
 
     document.getElementById("lastOrder").innerHTML = `
         ${lines}
-        <div class="summary-row"><span>${getPaymentLabel(last.paymentMethod)}</span><strong>${money(last.total)}</strong></div>
-        <div class="summary-row"><span>手續費</span><strong>-${money(last.fee || 0)}</strong></div>
+        <div class="summary-row"><span>${getPaymentLabel(last.paymentMethod)}</span><strong>$${money(last.total)}</strong></div>
+        <div class="summary-row"><span>手續費</span><strong>-$${money(last.fee || 0)}</strong></div>
         <div class="last-order-actions">
             <button class="btn" onclick="editLastOrder()">修改上一單</button>
             <button class="btn secondary" onclick="deleteLastOrder()">刪除上一單</button>
@@ -696,6 +742,21 @@ function addFood(name = "", amount = "") {
     `;
 
     document.getElementById("foodList").appendChild(row);
+}
+
+function clearFoodList() {
+    document.getElementById("foodList").innerHTML = "";
+}
+
+function resetReportForm() {
+    editingReportDate = "";
+    clearFoodList();
+    document.getElementById("staff").value = "";
+    document.getElementById("rent").value = "";
+    document.getElementById("other").value = "";
+    document.getElementById("date").value = getTodayString();
+    updateReportRevenueFields(getReportStatsForDate(getTodayString()));
+    calcAll();
 }
 
 function removeFood(id) {
@@ -720,6 +781,7 @@ function calcAll() {
     let staffVal = Number(document.getElementById("staff").value) || 0;
     let rentVal = Number(document.getElementById("rent").value) || 0;
     let otherVal = Number(document.getElementById("other").value) || 0;
+    let reportStats = getReportStatsForDate(document.getElementById("date").value);
 
     let kpis = [
         food ? food / 0.25 : 0,
@@ -729,8 +791,9 @@ function calcAll() {
     ];
 
     let max = Math.max(...kpis);
-    let diff = dayTotal - max;
+    let diff = reportStats.revenue - max;
 
+    updateReportRevenueFields(reportStats);
     document.getElementById("kpi").innerText = money(max);
     document.getElementById("diff").innerText = money(diff);
 }
@@ -765,7 +828,7 @@ function save() {
     }
 
     calcAll();
-    let stats = getTodayStats();
+    let stats = getReportStatsForDate(date);
 
     let record = {
         date,
@@ -792,8 +855,48 @@ function save() {
     setSales(records);
 
     alert("已存到本機");
+    editingReportDate = "";
     load();
     show("history");
+}
+
+function editReport(date) {
+    let record = getSales().find(item => item.date === date);
+    if (!record) {
+        alert("找不到這筆日結紀錄");
+        return;
+    }
+
+    editingReportDate = date;
+    document.getElementById("date").value = record.date;
+    clearFoodList();
+
+    (record.foodItems || []).forEach(item => {
+        addFood(item.name || "", item.amount || "");
+    });
+
+    document.getElementById("staff").value = record.staff || "";
+    document.getElementById("rent").value = record.rent || "";
+    document.getElementById("other").value = record.other || "";
+
+    updateReportRevenueFields(getReportStatsForDate(record.date));
+    calcAll();
+    show("report");
+}
+
+function deleteReport(date) {
+    if (!confirm(`確定刪除 ${date} 的日結紀錄？`)) {
+        return;
+    }
+
+    let records = getSales().filter(item => item.date !== date);
+    setSales(records);
+
+    if (editingReportDate === date) {
+        resetReportForm();
+    }
+
+    load();
 }
 
 function renderItemTotals(itemTotals) {
@@ -812,21 +915,25 @@ function load() {
 
     records.forEach(d => {
         let foodText = d.foodItems && d.foodItems.length
-            ? d.foodItems.map(item => `${escapeHtml(item.name || "未命名")} ${money(item.amount)}`).join("、")
+            ? d.foodItems.map(item => `${escapeHtml(item.name || "未命名")} $${money(item.amount)}`).join("、")
             : "無";
 
         html += `
         <div class="history-card">
             <h3>${escapeHtml(d.date)}</h3>
-            <p>營收：${money(d.revenue)}</p>
-            <p>現金：${money(d.cashTotal)}｜電子支付：${money(d.electronicTotal)}</p>
-            <p>電子支付手續費：${money(d.feeTotal)}｜實收：${money(d.netRevenue || d.revenue)}</p>
+            <p>營收：$${money(d.revenue)}</p>
+            <p>現金：$${money(d.cashTotal)}｜電子支付：$${money(d.electronicTotal)}</p>
+            <p>電子支付手續費：$${money(d.feeTotal)}｜實收：$${money(d.netRevenue || d.revenue)}</p>
             <p>商品銷售：${renderItemTotals(d.itemTotals)}</p>
             <p>食材：${foodText}</p>
-            <p>食材總成本：${money(d.foodTotal)}</p>
-            <p>人事：${money(d.staff)}｜租金：${money(d.rent)}｜管銷：${money(d.other)}</p>
-            <p>KPI：${money(d.kpi)}</p>
-            <p>差額：${money(d.diff)}</p>
+            <p>食材總成本：$${money(d.foodTotal)}</p>
+            <p>人事：$${money(d.staff)}｜租金：$${money(d.rent)}｜管銷：$${money(d.other)}</p>
+            <p>KPI：$${money(d.kpi)}</p>
+            <p>差額：$${money(d.diff)}</p>
+            <div class="history-actions">
+                <button class="btn" onclick="editReport('${escapeHtml(d.date)}')">修改</button>
+                <button class="btn secondary" onclick="deleteReport('${escapeHtml(d.date)}')">刪除</button>
+            </div>
         </div>`;
     });
 
@@ -838,9 +945,10 @@ function load() {
 }
 
 document.addEventListener("input", calcAll);
+document.getElementById("date").addEventListener("change", calcAll);
 document.getElementById("date").valueAsDate = new Date();
 
-if (!localStorage.getItem(getOrdersKey()) && Number(localStorage.getItem(getTodayKey()))) {
+if (!hasTodayOrdersRecord() && Number(localStorage.getItem(getTodayKey()))) {
     dayTotal = Number(localStorage.getItem(getTodayKey())) || 0;
 } else {
     dayTotal = getTodayStats().revenue;
