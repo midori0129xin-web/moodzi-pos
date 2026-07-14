@@ -174,6 +174,7 @@ input {
     background: #9b7a5b;
 }
 
+.price-toggle,
 .payment-toggle {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -181,6 +182,7 @@ input {
     margin-top: 8px;
 }
 
+.price-toggle button,
 .payment-toggle button {
     min-height: 54px;
     border: 2px solid #d8c7b2;
@@ -191,6 +193,7 @@ input {
     font-weight: 700;
 }
 
+.price-toggle button.active,
 .payment-toggle button.active {
     background: #6d4c2f;
     border-color: #6d4c2f;
@@ -294,14 +297,13 @@ input {
 <div id="sale" class="card">
     <h3>商品</h3>
 
-    <div class="grid">
-        <button class="item-btn" onclick="addToCart('紅豆起酥年糕',50)">紅豆起酥年糕<br>$50</button>
-        <button class="item-btn" onclick="addToCart('黑糖起酥年糕',50)">黑糖起酥年糕<br>$50</button>
-        <button class="item-btn" onclick="addToCart('軟餅小糰子',50)">軟餅小糰子<br>$50</button>
-        <button class="item-btn" onclick="addToCart('綜合年糕',50)">綜合年糕<br>$50</button>
-        <button class="item-btn" onclick="addToCart('項目五',50)">項目五<br>$50</button>
-        <button class="item-btn" onclick="addToCart('項目六',50)">項目六<br>$50</button>
+    <h3>售價模式</h3>
+    <div class="price-toggle">
+        <button id="price50" class="active" onclick="setPriceMode(50)">$50</button>
+        <button id="price60" onclick="setPriceMode(60)">$60</button>
     </div>
+
+    <div id="productGrid" class="grid"></div>
 
     <h3>本單</h3>
     <div id="cart"></div>
@@ -336,7 +338,7 @@ input {
     <p>日期</p>
     <input type="date" id="date">
 
-    <h3>食材成本（可多項）</h3>
+    <h3>額外成本（可多項）</h3>
     <div id="foodList"></div>
     <button class="btn" onclick="addFood()">＋新增食材</button>
 
@@ -349,12 +351,15 @@ input {
     <p>管銷</p>
     <input type="number" inputmode="numeric" id="other">
 
-    <h3>食材總成本：$<span id="foodTotal">0</span></h3>
+    <h3>商品成本：$<span id="productCostTotal">0</span></h3>
+    <h3>額外成本：$<span id="foodTotal">0</span></h3>
     <h3>營收：$<span id="rev">0</span></h3>
     <h3>現金收入：$<span id="cashTotal">0</span></h3>
     <h3>電子支付：$<span id="electronicTotal">0</span></h3>
     <h3>電子支付手續費：$<span id="feeTotal">0</span></h3>
     <h3>扣手續費後收入：$<span id="netRevenue">0</span></h3>
+    <h3>總成本：$<span id="totalCost">0</span></h3>
+    <h3>所得：$<span id="profit">0</span></h3>
     <h3>最高KPI：$<span id="kpi">0</span></h3>
     <h3>差額：$<span id="diff">0</span></h3>
 
@@ -371,6 +376,15 @@ const STORAGE_KEY = "moodzi-pos-sales";
 const DAY_TOTAL_PREFIX = "moodzi-pos-day-total-";
 const DAY_ORDERS_PREFIX = "moodzi-pos-orders-";
 const ELECTRONIC_FEE_RATE = 0.0315;
+const PRODUCT_COSTS = {
+    "紅豆起酥年糕": 12.45,
+    "黑糖起酥年糕": 12.23,
+    "軟餅小糰子": 15.75,
+    "綜合年糕": 12.34,
+    "項目五": 0,
+    "項目六": 0
+};
+const PRODUCTS = Object.keys(PRODUCT_COSTS);
 
 let cart = {};
 let cartTotal = 0;
@@ -407,12 +421,17 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
+function getProductCost(name) {
+    return Number(PRODUCT_COSTS[name]) || 0;
+}
+
 function cloneCart(source) {
     let copy = {};
     for (let name in source) {
         copy[name] = {
             qty: Number(source[name].qty) || 0,
-            price: Number(source[name].price) || 0
+            price: Number(source[name].price) || 0,
+            cost: Number.isFinite(Number(source[name].cost)) ? Number(source[name].cost) : getProductCost(name)
         };
     }
     return copy;
@@ -461,6 +480,7 @@ function getReportStatsForDate(date) {
             electronic: 0,
             fee: 0,
             net: 0,
+            productCost: 0,
             itemTotals: {},
             orders: []
         };
@@ -472,6 +492,9 @@ function getReportStatsForDate(date) {
         electronic: money(record.electronicTotal),
         fee: money(record.feeTotal),
         net: money(record.netRevenue || record.revenue),
+        productCost: Number.isFinite(Number(record.productCostTotal))
+            ? Number(record.productCostTotal)
+            : calculateProductCost(record.itemTotals || {}, record.orders || []),
         itemTotals: record.itemTotals || {},
         orders: record.orders || []
     };
@@ -483,6 +506,7 @@ function updateReportRevenueFields(stats) {
     document.getElementById("electronicTotal").innerText = money(stats.electronic);
     document.getElementById("feeTotal").innerText = money(stats.fee);
     document.getElementById("netRevenue").innerText = money(stats.net);
+    document.getElementById("productCostTotal").innerText = money(stats.productCost);
 }
 
 function setPayment(method) {
@@ -491,11 +515,28 @@ function setPayment(method) {
     document.getElementById("payElectronic").classList.toggle("active", method === "electronic");
 }
 
-function addToCart(name, price) {
+function setPriceMode(price) {
+    selectedPrice = Number(price) || 50;
+    document.getElementById("price50").classList.toggle("active", selectedPrice === 50);
+    document.getElementById("price60").classList.toggle("active", selectedPrice === 60);
+    renderProducts();
+}
+
+function renderProducts() {
+    document.getElementById("productGrid").innerHTML = PRODUCTS.map(name => {
+        let safeName = escapeHtml(name);
+        let jsName = escapeHtml(JSON.stringify(name));
+        return `<button class="item-btn" onclick='addToCart(${jsName})'>${safeName}<br>$${selectedPrice}</button>`;
+    }).join("");
+}
+
+function addToCart(name) {
     if (!cart[name]) {
-        cart[name] = { qty: 0, price: price };
+        cart[name] = { qty: 0, price: selectedPrice, cost: getProductCost(name) };
     }
     cart[name].qty += 1;
+    cart[name].price = selectedPrice;
+    cart[name].cost = getProductCost(name);
     renderCart();
 }
 
@@ -632,6 +673,7 @@ function getTodayStats() {
         electronic: 0,
         fee: 0,
         net: 0,
+        productCost: 0,
         itemTotals: {},
         orders
     };
@@ -660,13 +702,15 @@ function getTodayStats() {
         for (let name in order.items || {}) {
             let item = order.items[name];
             if (!stats.itemTotals[name]) {
-                stats.itemTotals[name] = { qty: 0, total: 0 };
+                stats.itemTotals[name] = { qty: 0, total: 0, cost: 0 };
             }
             stats.itemTotals[name].qty += Number(item.qty) || 0;
             stats.itemTotals[name].total += (Number(item.qty) || 0) * (Number(item.price) || 0);
+            stats.itemTotals[name].cost += (Number(item.qty) || 0) * (Number.isFinite(Number(item.cost)) ? Number(item.cost) : getProductCost(name));
         }
     });
 
+    stats.productCost = Object.values(stats.itemTotals).reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
     stats.net = stats.revenue - stats.fee;
     return stats;
 }
@@ -692,6 +736,7 @@ function renderTodayStats() {
     document.getElementById("electronicTotal").innerText = money(stats.electronic);
     document.getElementById("feeTotal").innerText = money(stats.fee);
     document.getElementById("netRevenue").innerText = money(stats.net);
+    document.getElementById("productCostTotal").innerText = money(stats.productCost);
 
     document.getElementById("paymentSummary").innerHTML = `
         <div class="summary-row"><span>現金</span><strong>$${money(stats.cash)}</strong></div>
@@ -703,7 +748,7 @@ function renderTodayStats() {
     let itemHtml = "";
     Object.keys(stats.itemTotals).forEach(name => {
         let item = stats.itemTotals[name];
-        itemHtml += `<div class="summary-row"><span>${escapeHtml(name)} x${item.qty}</span><strong>$${money(item.total)}</strong></div>`;
+        itemHtml += `<div class="summary-row"><span>${escapeHtml(name)} x${item.qty}</span><strong>$${money(item.total)} / 成本 $${money(item.cost)}</strong></div>`;
     });
     document.getElementById("salesSummary").innerHTML = itemHtml || '<p class="empty">尚無銷售</p>';
 
@@ -776,24 +821,45 @@ function calcFoodTotal() {
     return total;
 }
 
-function calcAll() {
+function getReportCostSummary(stats) {
     let food = calcFoodTotal();
     let staffVal = Number(document.getElementById("staff").value) || 0;
     let rentVal = Number(document.getElementById("rent").value) || 0;
     let otherVal = Number(document.getElementById("other").value) || 0;
+    let fee = Number(stats && stats.fee) || 0;
+    let productCost = Number(stats && stats.productCost) || 0;
+    let operatingCost = productCost + food + staffVal + rentVal + otherVal;
+
+    return {
+        productCost,
+        food,
+        staff: staffVal,
+        rent: rentVal,
+        other: otherVal,
+        fee,
+        operatingCost,
+        totalCost: operatingCost + fee,
+        profit: (Number(stats && stats.net) || 0) - operatingCost
+    };
+}
+
+function calcAll() {
     let reportStats = getReportStatsForDate(document.getElementById("date").value);
+    let costs = getReportCostSummary(reportStats);
 
     let kpis = [
-        food ? food / 0.25 : 0,
-        staffVal ? staffVal / 0.2 : 0,
-        rentVal ? rentVal / 0.1 : 0,
-        otherVal ? otherVal / 0.1 : 0
+        costs.food ? costs.food / 0.25 : 0,
+        costs.staff ? costs.staff / 0.2 : 0,
+        costs.rent ? costs.rent / 0.1 : 0,
+        costs.other ? costs.other / 0.1 : 0
     ];
 
     let max = Math.max(...kpis);
     let diff = reportStats.revenue - max;
 
     updateReportRevenueFields(reportStats);
+    document.getElementById("totalCost").innerText = money(costs.totalCost);
+    document.getElementById("profit").innerText = money(costs.profit);
     document.getElementById("kpi").innerText = money(max);
     document.getElementById("diff").innerText = money(diff);
 }
@@ -829,6 +895,7 @@ function save() {
 
     calcAll();
     let stats = getReportStatsForDate(date);
+    let costs = getReportCostSummary(stats);
 
     let record = {
         date,
@@ -837,6 +904,10 @@ function save() {
         electronicTotal: stats.electronic,
         feeTotal: stats.fee,
         netRevenue: stats.net,
+        productCostTotal: costs.productCost,
+        operatingCost: costs.operatingCost,
+        totalCost: costs.totalCost,
+        profit: costs.profit,
         itemTotals: stats.itemTotals,
         orders: stats.orders,
         foodItems: getFoodItems(),
@@ -899,6 +970,26 @@ function deleteReport(date) {
     load();
 }
 
+function calculateProductCost(itemTotals, orders = []) {
+    if (itemTotals && Object.keys(itemTotals).length) {
+        return Object.keys(itemTotals).reduce((sum, name) => {
+            let item = itemTotals[name] || {};
+            if (Number.isFinite(Number(item.cost))) {
+                return sum + Number(item.cost);
+            }
+            return sum + (Number(item.qty) || 0) * getProductCost(name);
+        }, 0);
+    }
+
+    return (orders || []).reduce((sum, order) => {
+        for (let name in order.items || {}) {
+            let item = order.items[name];
+            sum += (Number(item.qty) || 0) * (Number.isFinite(Number(item.cost)) ? Number(item.cost) : getProductCost(name));
+        }
+        return sum;
+    }, 0);
+}
+
 function renderItemTotals(itemTotals) {
     if (!itemTotals || Object.keys(itemTotals).length === 0) {
         return "無";
@@ -917,6 +1008,11 @@ function load() {
         let foodText = d.foodItems && d.foodItems.length
             ? d.foodItems.map(item => `${escapeHtml(item.name || "未命名")} $${money(item.amount)}`).join("、")
             : "無";
+        let productCost = Number.isFinite(Number(d.productCostTotal))
+            ? Number(d.productCostTotal)
+            : calculateProductCost(d.itemTotals, d.orders);
+        let legacyTotalCost = productCost + (Number(d.foodTotal) || 0) + (Number(d.staff) || 0) + (Number(d.rent) || 0) + (Number(d.other) || 0) + (Number(d.feeTotal) || 0);
+        let legacyProfit = (Number(d.netRevenue || d.revenue) || 0) - productCost - (Number(d.foodTotal) || 0) - (Number(d.staff) || 0) - (Number(d.rent) || 0) - (Number(d.other) || 0);
 
         html += `
         <div class="history-card">
@@ -924,9 +1020,12 @@ function load() {
             <p>營收：$${money(d.revenue)}</p>
             <p>現金：$${money(d.cashTotal)}｜電子支付：$${money(d.electronicTotal)}</p>
             <p>電子支付手續費：$${money(d.feeTotal)}｜實收：$${money(d.netRevenue || d.revenue)}</p>
+            <p>商品成本：$${money(productCost)}</p>
+            <p>總成本：$${money(Number.isFinite(Number(d.totalCost)) ? d.totalCost : legacyTotalCost)}</p>
+            <p>所得：$${money(Number.isFinite(Number(d.profit)) ? d.profit : legacyProfit)}</p>
             <p>商品銷售：${renderItemTotals(d.itemTotals)}</p>
             <p>食材：${foodText}</p>
-            <p>食材總成本：$${money(d.foodTotal)}</p>
+            <p>額外成本：$${money(d.foodTotal)}</p>
             <p>人事：$${money(d.staff)}｜租金：$${money(d.rent)}｜管銷：$${money(d.other)}</p>
             <p>KPI：$${money(d.kpi)}</p>
             <p>差額：$${money(d.diff)}</p>
