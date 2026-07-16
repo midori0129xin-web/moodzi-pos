@@ -390,6 +390,7 @@ let cart = {};
 let cartTotal = 0;
 let dayTotal = 0;
 let selectedPayment = "cash";
+let selectedPrice = 50;
 let editingReportDate = "";
 
 function getTodayString() {
@@ -1055,6 +1056,7 @@ if (!hasTodayOrdersRecord() && Number(localStorage.getItem(getTodayKey()))) {
 
 renderCart();
 setPayment("cash");
+setPriceMode(50);
 renderTodayStats();
 calcAll();
 load();
