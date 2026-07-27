@@ -381,7 +381,7 @@ const PRODUCT_COSTS = {
     "黑糖起酥年糕": 12.23,
     "軟餅小糰子": 15.75,
     "綜合年糕": 12.34,
-    "項目五": 0,
+    "香沾烤年糕": 11.12,
     "項目六": 0
 };
 const PRODUCTS = Object.keys(PRODUCT_COSTS);
@@ -405,8 +405,16 @@ function getTodayKey() {
     return `${DAY_TOTAL_PREFIX}${getTodayString()}`;
 }
 
+function getDayTotalKeyForDate(date) {
+    return `${DAY_TOTAL_PREFIX}${date}`;
+}
+
 function getOrdersKey() {
-    return `${DAY_ORDERS_PREFIX}${getTodayString()}`;
+    return getOrdersKeyForDate(getTodayString());
+}
+
+function getOrdersKeyForDate(date) {
+    return `${DAY_ORDERS_PREFIX}${date}`;
 }
 
 function money(value) {
@@ -469,22 +477,11 @@ function show(p) {
 }
 
 function getReportStatsForDate(date) {
-    if (!date || date === getTodayString()) {
-        return getTodayStats();
-    }
+    if (!date) return getTodayStats();
 
     let record = getSales().find(item => item.date === date);
     if (!record) {
-        return {
-            revenue: 0,
-            cash: 0,
-            electronic: 0,
-            fee: 0,
-            net: 0,
-            productCost: 0,
-            itemTotals: {},
-            orders: []
-        };
+        return getStatsForDate(date);
     }
 
     return {
@@ -593,11 +590,19 @@ function clearCart() {
 }
 
 function getTodayOrders() {
-    return JSON.parse(localStorage.getItem(getOrdersKey()) || "[]");
+    return getOrdersForDate(getTodayString());
+}
+
+function getOrdersForDate(date) {
+    return JSON.parse(localStorage.getItem(getOrdersKeyForDate(date)) || "[]");
 }
 
 function hasTodayOrdersRecord() {
-    return localStorage.getItem(getOrdersKey()) !== null;
+    return hasOrdersRecordForDate(getTodayString());
+}
+
+function hasOrdersRecordForDate(date) {
+    return localStorage.getItem(getOrdersKeyForDate(date)) !== null;
 }
 
 function setTodayOrders(orders) {
@@ -666,8 +671,8 @@ function deleteLastOrder() {
     calcAll();
 }
 
-function getTodayStats() {
-    let orders = getTodayOrders();
+function getStatsForDate(date) {
+    let orders = getOrdersForDate(date);
     let stats = {
         revenue: 0,
         cash: 0,
@@ -679,8 +684,8 @@ function getTodayStats() {
         orders
     };
 
-    if (!orders.length && !hasTodayOrdersRecord()) {
-        let legacyRevenue = Number(localStorage.getItem(getTodayKey())) || 0;
+    if (!orders.length && !hasOrdersRecordForDate(date)) {
+        let legacyRevenue = Number(localStorage.getItem(getDayTotalKeyForDate(date))) || 0;
         if (legacyRevenue) {
             stats.revenue = legacyRevenue;
             stats.cash = legacyRevenue;
@@ -714,6 +719,10 @@ function getTodayStats() {
     stats.productCost = Object.values(stats.itemTotals).reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
     stats.net = stats.revenue - stats.fee;
     return stats;
+}
+
+function getTodayStats() {
+    return getStatsForDate(getTodayString());
 }
 
 function updateDayFromOrders() {
